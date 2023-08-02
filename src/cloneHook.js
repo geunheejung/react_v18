@@ -4,39 +4,54 @@ const React = (function () {
 
   function useState(initialVal) {
     const state = hooks[idx] || initialVal;
-    // setState에서 올바른 hooks를 바라볼 수 있도록 idx를 고정시킴.
     const _idx = idx;
     const setState = (newVal) => {
       hooks[_idx] = newVal;
-      // idx는 useState가 호출될 때 마다 +1씩 증가되는데, render에 의해 setState가 호출되고 이로 인해 값이 할당되는 시점은
-      // 한참 뒤이기에, 시점상의 문제가 있음.
-      // 그리고 만약 setState를 하면 index에 의해 hooks에서 값을 가져와 해당 데이터를 바꿔줘야하는데
-      // 매번 setState마다 idx가 유지되지 않으면 문제가 있음.
-      console.log(hooks);
     };
 
     idx++;
-
     return [state, setState];
   }
 
+  // 즉, render를 호출하면 idx는 다시 초기화하고
+  // setState는 useState 했을 당시의 idx를 사용한다인듯.
   function render(Component) {
+    idx = 0;
     const C = Component();
     C.render();
     return C;
   }
 
-  return { useState, render };
+  function useEffect(cb, depArray) {
+    const oldDeps = hooks[idx];
+    let hasChanged = true; // default
+
+    if (oldDeps) {
+      hasChanged = depArray.some((dep, i) => !Object.is(dep, oldDeps[i]));
+    }
+
+    // 변경을 감지
+    if (hasChanged) {
+      cb();
+    }
+
+    hooks[idx] = depArray;
+    idx++;
+  }
+
+  return { useState, render, useEffect };
 })();
 
 function Component() {
   const [count, setCount] = React.useState(1);
   const [text, setText] = React.useState("apple");
 
+  React.useEffect(() => {
+    console.log("--- 실행됨! ---");
+  }, [count]);
+
   return {
-    render: () => {
-      console.log({ count, text });
-    },
+    render: () => console.log({ count, text }),
     click: () => setCount(count + 1),
     type: (word) => setText(word),
   };
@@ -44,10 +59,14 @@ function Component() {
 
 var App = React.render(Component); // { count: 1, text: 'apple' }
 App.click();
-var App = React.render(Component); // { count: 1, text: 'apple' } 🥲
+var App = React.render(Component); // { count: 2, text: 'apple' } 😀
 App.click();
-var App = React.render(Component); // { count: 1, text: 'apple' } 🥲
+var App = React.render(Component); // { count: 3, text: 'apple' } 😀
 App.type("orange");
-var App = React.render(Component); // { count: 1, text: 'apple' } 🥲
+var App = React.render(Component); // { count: 3, text: 'orange' } 😀
 App.type("peach");
-var App = React.render(Component); // { count: 1, text: 'apple' } 🥲
+var App = React.render(Component); // { count: 3, text: 'peach' } 😀
+
+// idx가 render될 때마다 초기화 되어야하는 이유는
+// 첫째 우리는 초깃값 이후 유지된 state를 원하는데 render될 시 idx가 초기화 되지 않으면 render에 의해
+// 다시 useState가 호출될 때 값이 보존되지 않음.
